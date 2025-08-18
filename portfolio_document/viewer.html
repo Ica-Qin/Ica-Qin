@@ -79,34 +79,47 @@
     // 与 viewer.html 同目录
     const GLB_URL = './stage.glb?v=1';
 
+    // 小工具
     const $ = (id)=>document.getElementById(id);
+    const val = (id, fallback) => (document.getElementById(id)?.value ?? fallback);
+    const chk = (id, fallback=false) => (document.getElementById(id)?.checked ?? fallback);
+
     const LOG = $('#log');
-    const log = (...args)=>{ LOG.textContent = `加载中： ${progressText}\n` + args.join(' ') + '\n' + LOG.textContent.split('\n').slice(2).join('\n'); console.log(...args); };
     let progressText = '—';
+    const log = (...args)=>{
+      LOG.textContent = `加载中： ${progressText}\n` + args.join(' ')
+        + '\n' + LOG.textContent.split('\n').slice(2).join('\n');
+      console.log(...args);
+    };
 
     // ===== 基础场景 =====
     const container = document.getElementById('app');
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputEncoding = THREE.sRGBEncoding; // r152
+    // 兼容新旧 three：r153+ 用 outputColorSpace；r152 用 outputEncoding
+    if ('outputColorSpace' in renderer) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else if ('outputEncoding' in renderer) {
+      renderer.outputEncoding = THREE.sRGBEncoding;
+    }
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color($('#bg').value);
+    scene.background = new THREE.Color(val('bg', '#f5f5f5'));
 
-    const camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 2000);
+    const camera = new THREE.PerspectiveCamera(parseFloat(val('fov','40')), window.innerWidth/window.innerHeight, 0.1, 2000);
     camera.position.set(0, 2, 6);
 
-    const light1 = new THREE.DirectionalLight(0xffffff, parseFloat($('#light').value));
+    const light1 = new THREE.DirectionalLight(0xffffff, parseFloat(val('light','1.2')));
     light1.position.set(2, 4, 2);
     scene.add(new THREE.AmbientLight(0xffffff, 0.6), light1);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = parseFloat($('#rotateSpeed').value);
+    controls.autoRotate = chk('autorotate', true);
+    controls.autoRotateSpeed = parseFloat(val('rotateSpeed','0.6'));
 
     // 可视化辅助
     const axes = new THREE.AxesHelper(1.2);
@@ -118,12 +131,13 @@
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-    outlinePass.edgeStrength = parseFloat($('#strength').value);
-    outlinePass.edgeThickness = parseFloat($('#thickness').value);
+    outlinePass.edgeStrength = parseFloat(val('strength','3'));
+    outlinePass.edgeThickness = parseFloat(val('thickness','2'));
     outlinePass.edgeGlow = 0.0;
     outlinePass.usePatternTexture = false;
-    outlinePass.visibleEdgeColor.set($('#color').value);
-    outlinePass.hiddenEdgeColor.set($('#color').value);
+    const edgeColor = val('color', '#000000');
+    outlinePass.visibleEdgeColor.set(edgeColor);
+    outlinePass.hiddenEdgeColor.set(edgeColor);
     composer.addPass(outlinePass);
 
     // ===== 模型加载 =====
@@ -197,12 +211,12 @@
       // 由 FOV 与 maxDim 计算相机距离
       const fov = camera.fov * Math.PI/180;
       const dist = maxDim / (2 * Math.tan(fov/2));
-      const ratio = parseFloat($('#ratio').value);
+      const ratio = parseFloat(val('ratio','1.35'));
       const camZ = dist * ratio;
 
       camera.position.set(bboxCenter.x, bboxCenter.y + maxDim*0.1, camZ);
 
-      if ($('#autoRange').checked) {
+      if (chk('autoRange', true)) {
         camera.near = Math.max(camZ - maxDim*3, 0.01);
         camera.far  = camZ + maxDim*3;
         $('#near').value = camera.near.toFixed(2);
@@ -220,8 +234,8 @@
       controls.update();
 
       // 网格按模型尺度缩放
-      grid.visible = $('#gridVis').checked;
-      const s = Math.max(maxDim * parseFloat($('#gridScale').value), 0.001);
+      grid.visible = chk('gridVis', true);
+      const s = Math.max(maxDim * parseFloat(val('gridScale','1')), 0.001);
       grid.scale.setScalar(s / 10); // 原始尺寸10，缩放到与 maxDim 同量级
 
       log(
