@@ -19,6 +19,15 @@
     .log{position:fixed;left:12px;top:12px;max-width:60vw;background:rgba(0,0,0,.6);color:#fff;
       font:12px/1.4 ui-monospace,monospace;padding:8px 10px;border-radius:8px;white-space:pre-wrap;z-index:10}
   </style>
+
+  <!-- ★ 关键：Import Map 把 "three" 映射到本地文件 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./libs/three-r152/build/three.module.js"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="app"></div>
@@ -42,20 +51,17 @@
     import { RenderPass } from './libs/three-r152/examples/jsm/postprocessing/RenderPass.js';
     import { OutlinePass } from './libs/three-r152/examples/jsm/postprocessing/OutlinePass.js';
 
-    // ===== 你的模型（与 viewer.html 同目录）=====
+    // 与 viewer.html 同目录
     const GLB_URL = './stage.glb?v=1';
 
-    // 日志
     const LOG = document.getElementById('log');
     const log = (...args)=>{ LOG.textContent += '\n' + args.join(' '); console.log(...args); };
 
-    // ===== 基础场景 =====
     const container = document.getElementById('app');
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    // r152 用 outputEncoding（r153+ 才是 outputColorSpace）
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputEncoding = THREE.sRGBEncoding; // r152
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -74,13 +80,11 @@
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.6;
 
-    // 可视化辅助
     const axes = new THREE.AxesHelper(1.2);
     const grid = new THREE.GridHelper(10, 10, 0x888888, 0xdddddd);
     grid.position.y = -0.01;
     scene.add(axes, grid);
 
-    // ===== 后处理：Outline =====
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
@@ -89,15 +93,14 @@
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       scene, camera
     );
-    outlinePass.edgeStrength = 3.0;     // 强度
-    outlinePass.edgeThickness = 2.0;    // 粗细（像素）
+    outlinePass.edgeStrength = 3.0;
+    outlinePass.edgeThickness = 2.0;
     outlinePass.edgeGlow = 0.0;
     outlinePass.usePatternTexture = false;
     outlinePass.visibleEdgeColor.set('#000000');
     outlinePass.hiddenEdgeColor.set('#000000');
     composer.addPass(outlinePass);
 
-    // ===== 加载 GLB =====
     const loader = new GLTFLoader();
     const selectable = [];
     loader.load(GLB_URL, (gltf) => {
@@ -124,7 +127,6 @@
       fitCameraToObject(camera, cube, controls);
     });
 
-    // ===== 悬停/点击高亮 =====
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let hovered = null, clicked = null;
@@ -154,7 +156,6 @@
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('click', onClick);
 
-    // ===== 自适应 =====
     window.addEventListener('resize', () => {
       const w = window.innerWidth, h = window.innerHeight;
       camera.aspect = w/h; camera.updateProjectionMatrix();
@@ -163,7 +164,6 @@
       outlinePass.setSize(w, h);
     });
 
-    // ===== 面板绑定 =====
     const $ = (id)=>document.getElementById(id);
     $('#toggleOutline').addEventListener('change', e=> outlinePass.enabled = e.target.checked);
     $('#color').addEventListener('input', e=>{
@@ -177,7 +177,6 @@
     function animate(){ requestAnimationFrame(animate); controls.update(); composer.render(); }
     animate();
 
-    // 视角适配
     function fitCameraToObject(camera, object, controls) {
       const box = new THREE.Box3().setFromObject(object);
       const size = new THREE.Vector3(); box.getSize(size);
