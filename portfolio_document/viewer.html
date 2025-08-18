@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GLB 交互描边查看器 (three r152 ESM)</title>
   <style>
-    html,body{margin:0;height:100%;background:#f5f5f5;}
+    html,body{margin:0;height:100%;background:#000;}
     #app{position:fixed;inset:0;}
     .panel{
       position:fixed; top:12px; right:12px; padding:12px; border-radius:12px;
@@ -17,6 +17,7 @@
     .panel .row > span{min-width:72px; color:#333}
     .panel input[type="color"]{width:32px;height:20px;border:none;background:none;padding:0}
     .panel input[type="range"]{width:150px}
+    .panel select{flex:1}
     .panel .sub{color:#888; margin-top:6px}
     .badge{position:fixed;left:12px;bottom:12px;font:12px system-ui;color:#666}
     .log{position:fixed;left:12px;top:12px;max-width:60vw;background:rgba(0,0,0,.65);color:#fff;
@@ -35,24 +36,35 @@
 
   <div class="panel">
     <div class="row"><label><input id="toggleOutline" type="checkbox" checked> 启用描边</label></div>
-    <div class="row"><span>颜色</span><input id="color" type="color" value="#000000"></div>
-    <div class="row"><span>粗细</span><input id="thickness" type="range" min="1" max="6" step="0.1" value="2"><output id="thicknessOut">2</output></div>
-    <div class="row"><span>强度</span><input id="strength" type="range" min="0" max="10" step="0.1" value="3"><output id="strengthOut">3</output></div>
+    <div class="row"><span>颜色</span><input id="color" type="color" value="#ff0000"></div>
+    <div class="row"><span>粗细</span><input id="thickness" type="range" min="1" max="8" step="0.1" value="3"><output id="thicknessOut">3</output></div>
+    <div class="row"><span>强度</span><input id="strength" type="range" min="0" max="12" step="0.1" value="6.5"><output id="strengthOut">6.5</output></div>
+
+    <div class="row"><span>描边模式</span>
+      <select id="outlineMode">
+        <option value="all" selected>全部</option>
+        <option value="hover">悬停</option>
+        <option value="click">点击</option>
+      </select>
+    </div>
     <hr>
-    <div class="row"><span>FOV</span><input id="fov" type="range" min="20" max="90" step="1" value="40"><output id="fovOut">40</output></div>
-    <div class="row"><span>视距裕量</span><input id="ratio" type="range" min="1.05" max="2.5" step="0.01" value="1.35"><output id="ratioOut">1.35</output></div>
+
+    <div class="row"><span>FOV</span><input id="fov" type="range" min="20" max="90" step="1" value="38"><output id="fovOut">38</output></div>
+    <div class="row"><span>视距裕量</span><input id="ratio" type="range" min="1.05" max="2.5" step="0.01" value="1.05"><output id="ratioOut">1.05</output></div>
     <div class="row"><label><input id="autoRange" type="checkbox" checked> 自动相机范围</label></div>
     <div class="row"><span>近裁剪</span><input id="near" type="range" min="0.01" max="50" step="0.01" value="0.1" disabled><output id="nearOut">0.10</output></div>
     <div class="row"><span>远裁剪</span><input id="far" type="range" min="10" max="10000" step="1" value="2000" disabled><output id="farOut">2000</output></div>
     <div class="row"><button id="refit">重新适配视角</button></div>
+
     <hr>
-    <div class="row"><span>背景</span><input id="bg" type="color" value="#f5f5f5"></div>
+    <div class="row"><span>背景</span><input id="bg" type="color" value="#000000"></div>
     <div class="row"><span>灯光</span><input id="light" type="range" min="0" max="3" step="0.05" value="1.2"><output id="lightOut">1.2</output></div>
     <div class="row"><label><input id="autorotate" type="checkbox" checked> 自动旋转</label></div>
     <div class="row"><span>自转速度</span><input id="rotateSpeed" type="range" min="0" max="2" step="0.05" value="0.6"><output id="rotateOut">0.6</output></div>
     <div class="row"><label><input id="gridVis" type="checkbox" checked> 显示网格</label></div>
-    <div class="row"><span>网格缩放</span><input id="gridScale" type="range" min="0.1" max="5" step="0.05" value="1"><output id="gridScaleOut">1.00</output></div>
-    <div class="sub">提示：鼠标悬停/点击可高亮部件</div>
+    <div class="row"><span>网格缩放</span><input id="gridScale" type="range" min="0.1" max="5" step="0.05" value="1.1"><output id="gridScaleOut">1.10</output></div>
+
+    <div class="sub">提示：鼠标悬停/点击可高亮部件；“全部”模式为整模描边。</div>
   </div>
 
   <div class="badge">three r152 (ESM) + OutlinePass</div>
@@ -66,19 +78,18 @@
     import { RenderPass } from './libs/three-r152/examples/jsm/postprocessing/RenderPass.js';
     import { OutlinePass } from './libs/three-r152/examples/jsm/postprocessing/OutlinePass.js';
 
-    // 只有 DOM 加载完再跑，避免空指针
     window.addEventListener('DOMContentLoaded', init);
 
     function init(){
       const GLB_URL = './stage.glb?v=1';
 
-      // ===== 小工具（安全读、写、绑定）=====
+      // ---------- DOM helpers ----------
       const $ = (id)=>document.getElementById(id);
-      const val = (id, fallback) => ( $(id)?.value ?? fallback );
-      const chk = (id, fallback=false) => ( $(id)?.checked ?? fallback );
-      const setVal = (id, v)=>{ const el=$(id); if(el) el.value=v; };
-      const setText= (id, t)=>{ const el=$(id); if(el) el.textContent=t; };
-      const on = (id, evt, fn)=>{ const el=$(id); if(el) el.addEventListener(evt, fn); };
+      const val = (id, fb)=>($(id)?.value ?? fb);
+      const chk = (id, fb=false)=>($(id)?.checked ?? fb);
+      const setVal = (id,v)=>{ const el=$(id); if(el) el.value=v; };
+      const setText= (id,t)=>{ const el=$(id); if(el) el.textContent=t; };
+      const on = (id,evt,fn)=>{ const el=$(id); if(el) el.addEventListener(evt,fn); };
 
       const LOG = $('#log');
       let progressText = '—';
@@ -90,23 +101,26 @@
         console.log(...args);
       };
 
-      // ===== 场景 / 渲染器 / 相机 =====
+      // ---------- Renderer / Scene / Camera ----------
       const container = document.getElementById('app');
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
-      // 兼容新旧 three
+      // 颜色管理兼容
       if ('outputColorSpace' in renderer) {
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;  // r153+
       } else if ('outputEncoding' in renderer) {
-        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.outputEncoding = THREE.sRGBEncoding;      // r152
       }
+      if (THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
       container.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(val('bg', '#f5f5f5'));
+      scene.background = new THREE.Color(val('bg','#000000'));
 
-      const camera = new THREE.PerspectiveCamera(parseFloat(val('fov','40')), window.innerWidth/window.innerHeight, 0.1, 2000);
+      const camera = new THREE.PerspectiveCamera(parseFloat(val('fov','38')), window.innerWidth/window.innerHeight, 0.1, 2000);
       camera.position.set(0, 2, 6);
 
       const light1 = new THREE.DirectionalLight(0xffffff, parseFloat(val('light','1.2')));
@@ -119,25 +133,26 @@
       controls.autoRotate = chk('autorotate', true);
       controls.autoRotateSpeed = parseFloat(val('rotateSpeed','0.6'));
 
-      // 辅助
+      // Helpers
       const axes = new THREE.AxesHelper(1.2);
-      const grid = new THREE.GridHelper(10, 10, 0x888888, 0xdddddd);
+      const grid = new THREE.GridHelper(10, 10, 0x888888, 0x222222);
       grid.position.y = -0.01;
       scene.add(axes, grid);
 
-      // 后处理
+      // ---------- Postprocessing ----------
       const composer = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
+
       const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-      outlinePass.edgeStrength = parseFloat(val('strength','3'));
-      outlinePass.edgeThickness = parseFloat(val('thickness','2'));
+      outlinePass.edgeStrength = parseFloat(val('strength','6.5'));
+      outlinePass.edgeThickness = parseFloat(val('thickness','3'));
       outlinePass.edgeGlow = 0.0; outlinePass.usePatternTexture = false;
-      const edgeColor = val('color', '#000000');
+      const edgeColor = val('color', '#ff0000');
       outlinePass.visibleEdgeColor.set(edgeColor);
       outlinePass.hiddenEdgeColor.set(edgeColor);
       composer.addPass(outlinePass);
 
-      // 模型
+      // ---------- Load GLB ----------
       const loader = new GLTFLoader();
       const selectable = [];
       let bboxSize = new THREE.Vector3(1,1,1);
@@ -145,17 +160,32 @@
       let maxDim = 1;
 
       loader.load(GLB_URL, (gltf) => {
-        log('✅ 模型加载完成：', GLB_URL);
         const root = gltf.scene;
         root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; selectable.push(o); } });
         scene.add(root);
 
+        // 材质统计（诊断）
+        const stat = {basic:0,standard:0,physical:0,withMap:0,others:0,total:0};
+        root.traverse(o=>{
+          const m=o.material; if(o.isMesh && m){ stat.total++;
+            if(m.isMeshBasicMaterial) stat.basic++;
+            else if(m.isMeshStandardMaterial) stat.standard++;
+            else if(m.isMeshPhysicalMaterial) stat.physical++;
+            else stat.others++;
+            if(m.map) stat.withMap++;
+          }
+        });
+        console.log('🧪 材质统计：', stat);
+
+        // 包围盒 & 初次适配
         const box = new THREE.Box3().setFromObject(root);
         box.getSize(bboxSize); box.getCenter(bboxCenter);
         maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z) || 1;
 
-        refitCamera();                       // 初次适配
-        outlinePass.selectedObjects = selectable.length ? selectable : [root];
+        refitCamera();
+        updateSelection(); // 根据模式立即设置选中集
+        log('✅ 模型加载完成：', GLB_URL);
+
       }, (evt) => {
         progressText = evt.total ? `${(evt.loaded/evt.total*100).toFixed(1)}%` : `${evt.loaded} bytes`;
       }, (err) => {
@@ -167,10 +197,13 @@
         refitCamera();
       });
 
-      // 交互选中
+      // ---------- Hover / Click selection ----------
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2();
-      let hovered=null, clicked=null;
+      let hovered=null, clicked=null, outlineMode='all';
+
+      on('outlineMode','change', e=>{ outlineMode = e.target.value; updateSelection(); });
+      outlineMode = val('outlineMode','all');
 
       function onPointerMove(event){
         const rect = renderer.domElement.getBoundingClientRect();
@@ -180,29 +213,30 @@
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(selectable, true);
         hovered = hits[0]?.object || null;
-        updateSelection();
+        if (outlineMode==='hover') updateSelection();
       }
       function onClick(){
         if (!selectable.length) return;
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(selectable, true);
         clicked = hits[0]?.object || null;
-        updateSelection(true);
+        if (outlineMode==='click') updateSelection(true);
       }
       renderer.domElement.addEventListener('pointermove', onPointerMove);
       renderer.domElement.addEventListener('click', onClick);
 
-      function updateSelection(byClick=false){
-        if (byClick && clicked) outlinePass.selectedObjects = [clicked];
-        else if (!clicked && hovered) outlinePass.selectedObjects = [hovered];
-        else if (!clicked && !hovered) outlinePass.selectedObjects = selectable.length?selectable:[];
+      function updateSelection(){
+        if (outlineMode==='all') { outlinePass.selectedObjects = selectable; return; }
+        if (outlineMode==='click') { outlinePass.selectedObjects = clicked ? [clicked] : []; return; }
+        // hover
+        outlinePass.selectedObjects = hovered ? [hovered] : [];
       }
 
-      // 视角适配（所有 DOM 写操作都有空值保护）
+      // ---------- Camera fit ----------
       function refitCamera(){
         const fov = camera.fov * Math.PI/180;
         const dist = maxDim / (2 * Math.tan(fov/2));
-        const ratio = parseFloat(val('ratio','1.35'));
+        const ratio = parseFloat(val('ratio','1.05'));
         const camZ = dist * ratio;
 
         camera.position.set(bboxCenter.x, bboxCenter.y + maxDim*0.1, camZ);
@@ -215,7 +249,7 @@
           setText('nearOut', camera.near.toFixed(2));
           setText('farOut',  camera.far.toFixed(0));
         } else {
-          const nearEl = $('#near'), farEl = $('#far');
+          const nearEl=$('near'), farEl=$('far');
           camera.near = Math.max(parseFloat(nearEl?.value ?? 0.1), 0.01);
           camera.far  = Math.max(parseFloat(farEl?.value  ?? 2000), camera.near + 1);
         }
@@ -226,14 +260,14 @@
         controls.update();
 
         grid.visible = chk('gridVis', true);
-        const s = Math.max(maxDim * parseFloat(val('gridScale','1')), 0.001);
+        const s = Math.max(maxDim * parseFloat(val('gridScale','1.1')), 0.001);
         grid.scale.setScalar(s / 10);
 
         log(`📐 bbox=${bboxSize.toArray().map(n=>n.toFixed(2)).join(',')}  center=${bboxCenter.toArray().map(n=>n.toFixed(2)).join(',')}`,
             ` camZ=${camZ.toFixed(2)}  near/far=${camera.near.toFixed(2)}/${camera.far.toFixed(2)}`);
       }
 
-      // 面板事件（全部用安全 on() 绑定）
+      // ---------- UI bindings ----------
       on('toggleOutline','change', e=> outlinePass.enabled = e.target.checked);
       on('color','input', e=>{ outlinePass.visibleEdgeColor.set(e.target.value); outlinePass.hiddenEdgeColor.set(e.target.value); });
       on('thickness','input', e=>{ outlinePass.edgeThickness = parseFloat(e.target.value); setText('thicknessOut',e.target.value); });
@@ -241,9 +275,9 @@
 
       on('fov','input', e=>{ camera.fov = parseFloat(e.target.value); setText('fovOut',e.target.value); refitCamera(); });
       on('ratio','input', e=>{ setText('ratioOut',e.target.value); refitCamera(); });
-      on('autoRange','change', e=>{ const onOff = e.target.checked; const nearEl=$('near'), farEl=$('far'); if(nearEl&&farEl){nearEl.disabled=farEl.disabled=onOff;} refitCamera(); });
-      on('near','input', e=>{ setText('nearOut',parseFloat(e.target.value).toFixed(2)); if(!chk('autoRange', true)) refitCamera(); });
-      on('far','input',  e=>{ setText('farOut', parseFloat(e.target.value).toFixed(0)); if(!chk('autoRange', true)) refitCamera(); });
+      on('autoRange','change', e=>{ const onoff=e.target.checked; const nearEl=$('near'),farEl=$('far'); if(nearEl&&farEl){nearEl.disabled=farEl.disabled=onoff;} refitCamera(); });
+      on('near','input', e=>{ setText('nearOut',parseFloat(e.target.value).toFixed(2)); if(!chk('autoRange',true)) refitCamera(); });
+      on('far','input',  e=>{ setText('farOut', parseFloat(e.target.value).toFixed(0)); if(!chk('autoRange',true)) refitCamera(); });
       on('refit','click', refitCamera);
 
       on('bg','input', e=> scene.background = new THREE.Color(e.target.value));
@@ -253,7 +287,7 @@
       on('gridVis','change', ()=> refitCamera());
       on('gridScale','input', e=>{ setText('gridScaleOut',parseFloat(e.target.value).toFixed(2)); refitCamera(); });
 
-      // 自适应
+      // ---------- Resize ----------
       window.addEventListener('resize', () => {
         const w = window.innerWidth, h = window.innerHeight;
         camera.aspect = w/h; camera.updateProjectionMatrix();
@@ -262,7 +296,7 @@
         outlinePass.setSize(w, h);
       });
 
-      // 渲染循环
+      // ---------- Loop ----------
       function animate(){ requestAnimationFrame(animate); controls.update(); composer.render(); }
       animate();
     }
