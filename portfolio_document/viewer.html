@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GLB 交互描边查看器 (three r152 ESM)</title>
+  <title>GLB 交互描边查看器 (Outline + Crease)</title>
   <style>
     html,body{margin:0;height:100%;background:#000;}
     #app{position:fixed;inset:0;}
@@ -14,7 +14,7 @@
       max-width:300px
     }
     .panel .row{display:flex; align-items:center; gap:8px; margin:6px 0;}
-    .panel .row > span{min-width:72px; color:#333}
+    .panel .row > span{min-width:80px; color:#333}
     .panel input[type="color"]{width:32px;height:20px;border:none;background:none;padding:0}
     .panel input[type="range"]{width:150px}
     .panel select{flex:1}
@@ -26,7 +26,7 @@
     button:active{transform:translateY(1px)}
   </style>
 
-  <!-- Import map：把裸模块名 "three" 映射到本地 -->
+  <!-- import map：把裸模块名 three 映射到本地 -->
   <script type="importmap">
   { "imports": { "three": "./libs/three-r152/build/three.module.js" } }
   </script>
@@ -35,7 +35,7 @@
   <div id="app"></div>
 
   <div class="panel">
-    <div class="row"><label><input id="toggleOutline" type="checkbox" checked> 启用描边</label></div>
+    <div class="row"><label><input id="toggleOutline" type="checkbox" checked> 启用轮廓描边</label></div>
     <div class="row"><span>颜色</span><input id="color" type="color" value="#ff0000"></div>
     <div class="row"><span>粗细</span><input id="thickness" type="range" min="1" max="8" step="0.1" value="3"><output id="thicknessOut">3</output></div>
     <div class="row"><span>强度</span><input id="strength" type="range" min="0" max="12" step="0.1" value="6.5"><output id="strengthOut">6.5</output></div>
@@ -47,8 +47,12 @@
         <option value="click">点击</option>
       </select>
     </div>
-    <hr>
 
+    <hr>
+    <div class="row"><label><input id="toggleCrease" type="checkbox" checked> 显示转折线</label></div>
+    <div class="row"><span>角阈值</span><input id="creaseAngle" type="range" min="1" max="90" step="1" value="35"><output id="creaseAngleOut">35°</output></div>
+
+    <hr>
     <div class="row"><span>FOV</span><input id="fov" type="range" min="20" max="90" step="1" value="38"><output id="fovOut">38</output></div>
     <div class="row"><span>视距裕量</span><input id="ratio" type="range" min="1.05" max="2.5" step="0.01" value="1.05"><output id="ratioOut">1.05</output></div>
     <div class="row"><label><input id="autoRange" type="checkbox" checked> 自动相机范围</label></div>
@@ -64,10 +68,10 @@
     <div class="row"><label><input id="gridVis" type="checkbox" checked> 显示网格</label></div>
     <div class="row"><span>网格缩放</span><input id="gridScale" type="range" min="0.1" max="5" step="0.05" value="1.1"><output id="gridScaleOut">1.10</output></div>
 
-    <div class="sub">提示：鼠标悬停/点击可高亮部件；“全部”模式为整模描边。</div>
+    <div class="sub">提示：轮廓描边=外轮廓粗线；转折线=几何锐角线（类似 Freestyle）。</div>
   </div>
 
-  <div class="badge">three r152 (ESM) + OutlinePass</div>
+  <div class="badge">three r152 (ESM) + OutlinePass + Edges</div>
   <div class="log" id="log">日志：</div>
 
   <script type="module">
@@ -106,7 +110,6 @@
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
-      // 颜色管理兼容
       if ('outputColorSpace' in renderer) {
         renderer.outputColorSpace = THREE.SRGBColorSpace;  // r153+
       } else if ('outputEncoding' in renderer) {
@@ -155,16 +158,17 @@
       // ---------- Load GLB ----------
       const loader = new GLTFLoader();
       const selectable = [];
+      let root = null;
       let bboxSize = new THREE.Vector3(1,1,1);
       let bboxCenter = new THREE.Vector3(0,0,0);
       let maxDim = 1;
 
       loader.load(GLB_URL, (gltf) => {
-        const root = gltf.scene;
+        root = gltf.scene;
         root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; selectable.push(o); } });
         scene.add(root);
 
-        // 材质统计（诊断）
+        // 材质统计（你的截图里 basic 为主，说明大多是 Unlit/Basic，无贴图）
         const stat = {basic:0,standard:0,physical:0,withMap:0,others:0,total:0};
         root.traverse(o=>{
           const m=o.material; if(o.isMesh && m){ stat.total++;
@@ -183,7 +187,8 @@
         maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z) || 1;
 
         refitCamera();
-        updateSelection(); // 根据模式立即设置选中集
+        updateSelection();      // 轮廓描边
+        rebuildCreaseLines();   // 转折线
         log('✅ 模型加载完成：', GLB_URL);
 
       }, (evt) => {
@@ -228,8 +233,52 @@
       function updateSelection(){
         if (outlineMode==='all') { outlinePass.selectedObjects = selectable; return; }
         if (outlineMode==='click') { outlinePass.selectedObjects = clicked ? [clicked] : []; return; }
-        // hover
         outlinePass.selectedObjects = hovered ? [hovered] : [];
+      }
+
+      // ---------- Crease lines（EdgesGeometry） ----------
+      let creaseAngle = parseFloat(val('creaseAngle','35')); // 度
+      on('toggleCrease','change', e=> setCreaseVisible(e.target.checked));
+      on('creaseAngle','input', e=>{
+        creaseAngle = parseFloat(e.target.value);
+        setText('creaseAngleOut', `${creaseAngle}°`);
+        rebuildCreaseLines();
+      });
+      on('color','input', e=> setCreaseColor(e.target.value));
+
+      function setCreaseVisible(v){
+        if (!root) return;
+        root.traverse(o=>{
+          if (o.userData.__edgeLines) o.userData.__edgeLines.visible = v;
+        });
+      }
+      function setCreaseColor(hex){
+        if (!root) return;
+        root.traverse(o=>{
+          const lines = o.userData.__edgeLines;
+          if (lines && lines.material) lines.material.color.set(hex);
+        });
+      }
+      function rebuildCreaseLines(){
+        if (!root) return;
+        // 清除旧线
+        root.traverse(o=>{
+          const lines = o.userData.__edgeLines;
+          if (lines) { o.remove(lines); lines.geometry.dispose(); lines.material.dispose(); o.userData.__edgeLines=null; }
+        });
+        // 新建
+        const colorHex = val('color','#ff0000');
+        root.traverse(o=>{
+          if (o.isMesh && o.geometry){
+            const eg = new THREE.EdgesGeometry(o.geometry, creaseAngle);
+            const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent:true, opacity:1 });
+            const lines = new THREE.LineSegments(eg, mat);
+            lines.userData.__edge = true;
+            o.add(lines);                 // 作为 mesh 的子节点，可自动跟随变换
+            o.userData.__edgeLines = lines;
+            lines.visible = chk('toggleCrease', true);
+          }
+        });
       }
 
       // ---------- Camera fit ----------
@@ -269,7 +318,6 @@
 
       // ---------- UI bindings ----------
       on('toggleOutline','change', e=> outlinePass.enabled = e.target.checked);
-      on('color','input', e=>{ outlinePass.visibleEdgeColor.set(e.target.value); outlinePass.hiddenEdgeColor.set(e.target.value); });
       on('thickness','input', e=>{ outlinePass.edgeThickness = parseFloat(e.target.value); setText('thicknessOut',e.target.value); });
       on('strength','input', e=>{ outlinePass.edgeStrength  = parseFloat(e.target.value); setText('strengthOut', e.target.value); });
 
