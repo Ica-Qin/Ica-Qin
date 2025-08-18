@@ -17,7 +17,6 @@
     .panel .row > span{min-width:72px; color:#333}
     .panel input[type="color"]{width:32px;height:20px;border:none;background:none;padding:0}
     .panel input[type="range"]{width:150px}
-    .panel input[type="number"]{width:84px}
     .panel .sub{color:#888; margin-top:6px}
     .badge{position:fixed;left:12px;bottom:12px;font:12px system-ui;color:#666}
     .log{position:fixed;left:12px;top:12px;max-width:60vw;background:rgba(0,0,0,.65);color:#fff;
@@ -76,215 +75,221 @@
     import { RenderPass } from './libs/three-r152/examples/jsm/postprocessing/RenderPass.js';
     import { OutlinePass } from './libs/three-r152/examples/jsm/postprocessing/OutlinePass.js';
 
-    // 与 viewer.html 同目录
-    const GLB_URL = './stage.glb?v=1';
+    // 等 DOM 解析完成再初始化，避免 null.addEventListener / null.value
+    window.addEventListener('DOMContentLoaded', init);
 
-    // 小工具
-    const $ = (id)=>document.getElementById(id);
-    const val = (id, fallback) => (document.getElementById(id)?.value ?? fallback);
-    const chk = (id, fallback=false) => (document.getElementById(id)?.checked ?? fallback);
+    function init(){
+      const GLB_URL = './stage.glb?v=1';
 
-    const LOG = $('#log');
-    let progressText = '—';
-    const log = (...args)=>{
-      LOG.textContent = `加载中： ${progressText}\n` + args.join(' ')
-        + '\n' + LOG.textContent.split('\n').slice(2).join('\n');
-      console.log(...args);
-    };
+      // 工具
+      const $ = (id)=>document.getElementById(id);
+      const val = (id, fallback) => (document.getElementById(id)?.value ?? fallback);
+      const chk = (id, fallback=false) => (document.getElementById(id)?.checked ?? fallback);
 
-    // ===== 基础场景 =====
-    const container = document.getElementById('app');
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    // 兼容新旧 three：r153+ 用 outputColorSpace；r152 用 outputEncoding
-    if ('outputColorSpace' in renderer) {
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-    } else if ('outputEncoding' in renderer) {
-      renderer.outputEncoding = THREE.sRGBEncoding;
-    }
-    container.appendChild(renderer.domElement);
+      const LOG = $('#log');
+      let progressText = '—';
+      const log = (...args)=>{
+        if (LOG) {
+          LOG.textContent = `加载中： ${progressText}\n` + args.join(' ')
+            + '\n' + LOG.textContent.split('\n').slice(2).join('\n');
+        }
+        console.log(...args);
+      };
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(val('bg', '#f5f5f5'));
+      // ===== 基础场景 =====
+      const container = document.getElementById('app');
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      // 兼容新旧 three：r153+ 用 outputColorSpace；r152 用 outputEncoding
+      if ('outputColorSpace' in renderer) {
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+      } else if ('outputEncoding' in renderer) {
+        renderer.outputEncoding = THREE.sRGBEncoding;
+      }
+      container.appendChild(renderer.domElement);
 
-    const camera = new THREE.PerspectiveCamera(parseFloat(val('fov','40')), window.innerWidth/window.innerHeight, 0.1, 2000);
-    camera.position.set(0, 2, 6);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(val('bg', '#f5f5f5'));
 
-    const light1 = new THREE.DirectionalLight(0xffffff, parseFloat(val('light','1.2')));
-    light1.position.set(2, 4, 2);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6), light1);
+      const camera = new THREE.PerspectiveCamera(parseFloat(val('fov','40')), window.innerWidth/window.innerHeight, 0.1, 2000);
+      camera.position.set(0, 2, 6);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.autoRotate = chk('autorotate', true);
-    controls.autoRotateSpeed = parseFloat(val('rotateSpeed','0.6'));
+      const light1 = new THREE.DirectionalLight(0xffffff, parseFloat(val('light','1.2')));
+      light1.position.set(2, 4, 2);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6), light1);
 
-    // 可视化辅助
-    const axes = new THREE.AxesHelper(1.2);
-    const grid = new THREE.GridHelper(10, 10, 0x888888, 0xdddddd);
-    grid.position.y = -0.01;
-    scene.add(axes, grid);
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.autoRotate = chk('autorotate', true);
+      controls.autoRotateSpeed = parseFloat(val('rotateSpeed','0.6'));
 
-    // ===== 后处理：Outline =====
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-    outlinePass.edgeStrength = parseFloat(val('strength','3'));
-    outlinePass.edgeThickness = parseFloat(val('thickness','2'));
-    outlinePass.edgeGlow = 0.0;
-    outlinePass.usePatternTexture = false;
-    const edgeColor = val('color', '#000000');
-    outlinePass.visibleEdgeColor.set(edgeColor);
-    outlinePass.hiddenEdgeColor.set(edgeColor);
-    composer.addPass(outlinePass);
+      // 可视化辅助
+      const axes = new THREE.AxesHelper(1.2);
+      const grid = new THREE.GridHelper(10, 10, 0x888888, 0xdddddd);
+      grid.position.y = -0.01;
+      scene.add(axes, grid);
 
-    // ===== 模型加载 =====
-    const loader = new GLTFLoader();
-    const selectable = [];
-    let bboxSize = new THREE.Vector3(1,1,1);
-    let bboxCenter = new THREE.Vector3(0,0,0);
-    let maxDim = 1;
+      // ===== 后处理：Outline =====
+      const composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+      outlinePass.edgeStrength = parseFloat(val('strength','3'));
+      outlinePass.edgeThickness = parseFloat(val('thickness','2'));
+      outlinePass.edgeGlow = 0.0;
+      outlinePass.usePatternTexture = false;
+      const edgeColor = val('color', '#000000');
+      outlinePass.visibleEdgeColor.set(edgeColor);
+      outlinePass.hiddenEdgeColor.set(edgeColor);
+      composer.addPass(outlinePass);
 
-    loader.load(GLB_URL, (gltf) => {
-      log('✅ 模型加载完成：', GLB_URL);
-      const root = gltf.scene;
-      root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; selectable.push(o); } });
-      scene.add(root);
+      // ===== 模型加载 =====
+      const loader = new GLTFLoader();
+      const selectable = [];
+      let bboxSize = new THREE.Vector3(1,1,1);
+      let bboxCenter = new THREE.Vector3(0,0,0);
+      let maxDim = 1;
 
-      // 计算包围盒
-      const box = new THREE.Box3().setFromObject(root);
-      box.getSize(bboxSize);
-      box.getCenter(bboxCenter);
-      maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z) || 1;
+      loader.load(GLB_URL, (gltf) => {
+        log('✅ 模型加载完成：', GLB_URL);
+        const root = gltf.scene;
+        root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; selectable.push(o); } });
+        scene.add(root);
 
-      refitCamera(); // 初次适配
-      outlinePass.selectedObjects = selectable.length ? selectable : [root];
+        // 计算包围盒
+        const box = new THREE.Box3().setFromObject(root);
+        box.getSize(bboxSize);
+        box.getCenter(bboxCenter);
+        maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z) || 1;
 
-    }, (evt) => {
-      if (evt.total) progressText = `${(evt.loaded/evt.total*100).toFixed(1)}%`;
-      else progressText = `${evt.loaded} bytes`;
-    }, (err) => {
-      log('❌ 模型加载失败：', err && (err.message || err));
-      // 兜底：显示一个立方体
-      const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness:0, roughness:1 });
-      const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
-      scene.add(cube);
-      const box = new THREE.Box3().setFromObject(cube);
-      box.getSize(bboxSize); box.getCenter(bboxCenter); maxDim = 1;
-      refitCamera();
-    });
+        refitCamera(); // 初次适配
+        outlinePass.selectedObjects = selectable.length ? selectable : [root];
 
-    // ===== 交互高亮 =====
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-    let hovered = null, clicked = null;
+      }, (evt) => {
+        if (evt.total) progressText = `${(evt.loaded/evt.total*100).toFixed(1)}%`;
+        else progressText = `${evt.loaded} bytes`;
+      }, (err) => {
+        log('❌ 模型加载失败：', err && (err.message || err));
+        // 兜底：显示一个立方体
+        const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness:0, roughness:1 });
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
+        scene.add(cube);
+        const box = new THREE.Box3().setFromObject(cube);
+        box.getSize(bboxSize); box.getCenter(bboxCenter); maxDim = 1;
+        refitCamera();
+      });
 
-    function onPointerMove(event){
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      if (!selectable.length) return;
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(selectable, true);
-      hovered = hits[0]?.object || null;
-      updateSelection();
-    }
-    function onClick(){
-      if (!selectable.length) return;
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(selectable, true);
-      clicked = hits[0]?.object || null;
-      updateSelection(true);
-    }
-    function updateSelection(byClick=false){
-      if (byClick && clicked) outlinePass.selectedObjects = [clicked];
-      else if (!clicked && hovered) outlinePass.selectedObjects = [hovered];
-      else if (!clicked && !hovered) outlinePass.selectedObjects = selectable.length?selectable:[];
-    }
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('click', onClick);
+      // ===== 交互高亮 =====
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      let hovered = null, clicked = null;
 
-    // ===== 相机适配与面板联动 =====
-    function refitCamera() {
-      // 由 FOV 与 maxDim 计算相机距离
-      const fov = camera.fov * Math.PI/180;
-      const dist = maxDim / (2 * Math.tan(fov/2));
-      const ratio = parseFloat(val('ratio','1.35'));
-      const camZ = dist * ratio;
+      function onPointerMove(event){
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        if (!selectable.length) return;
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObjects(selectable, true);
+        hovered = hits[0]?.object || null;
+        updateSelection();
+      }
+      function onClick(){
+        if (!selectable.length) return;
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObjects(selectable, true);
+        clicked = hits[0]?.object || null;
+        updateSelection(true);
+      }
+      function updateSelection(byClick=false){
+        if (byClick && clicked) outlinePass.selectedObjects = [clicked];
+        else if (!clicked && hovered) outlinePass.selectedObjects = [hovered];
+        else if (!clicked && !hovered) outlinePass.selectedObjects = selectable.length?selectable:[];
+      }
+      renderer.domElement.addEventListener('pointermove', onPointerMove);
+      renderer.domElement.addEventListener('click', onClick);
 
-      camera.position.set(bboxCenter.x, bboxCenter.y + maxDim*0.1, camZ);
+      // ===== 相机适配与面板联动 =====
+      function refitCamera() {
+        const fov = camera.fov * Math.PI/180;
+        const dist = maxDim / (2 * Math.tan(fov/2));
+        const ratio = parseFloat(val('ratio','1.35'));
+        const camZ = dist * ratio;
 
-      if (chk('autoRange', true)) {
-        camera.near = Math.max(camZ - maxDim*3, 0.01);
-        camera.far  = camZ + maxDim*3;
-        $('#near').value = camera.near.toFixed(2);
-        $('#far').value  = camera.far.toFixed(0);
-        $('#nearOut').textContent = parseFloat($('#near').value).toFixed(2);
-        $('#farOut').textContent  = parseFloat($('#far').value).toFixed(0);
-      } else {
-        camera.near = Math.max(parseFloat($('#near').value), 0.01);
-        camera.far  = Math.max(parseFloat($('#far').value), camera.near + 1);
+        camera.position.set(bboxCenter.x, bboxCenter.y + maxDim*0.1, camZ);
+
+        if (chk('autoRange', true)) {
+          camera.near = Math.max(camZ - maxDim*3, 0.01);
+          camera.far  = camZ + maxDim*3;
+          $('#near').value = camera.near.toFixed(2);
+          $('#far').value  = camera.far.toFixed(0);
+          $('#nearOut').textContent = parseFloat($('#near').value).toFixed(2);
+          $('#farOut').textContent  = parseFloat($('#far').value).toFixed(0);
+        } else {
+          camera.near = Math.max(parseFloat($('#near').value), 0.01);
+          camera.far  = Math.max(parseFloat($('#far').value), camera.near + 1);
+        }
+
+        camera.updateProjectionMatrix();
+        const controls = renderer.__controls || null; // 仅防 IDE 警告
+        if (controls) controls.update();
+
+        grid.visible = chk('gridVis', true);
+        const s = Math.max(maxDim * parseFloat(val('gridScale','1')), 0.001);
+        grid.scale.setScalar(s / 10);
+
+        log(
+          `📐 bbox=${bboxSize.toArray().map(n=>n.toFixed(2)).join(',')}  center=${bboxCenter.toArray().map(n=>n.toFixed(2)).join(',')}`,
+          ` camZ=${camZ.toFixed(2)}  near/far=${camera.near.toFixed(2)}/${camera.far.toFixed(2)}`
+        );
       }
 
-      camera.updateProjectionMatrix();
-      controls.target.copy(bboxCenter);
-      controls.maxDistance = camera.far * 0.9;
-      controls.update();
+      // 把 controls 暴露给 refitCamera 上面的容错
+      renderer.__controls = controls;
 
-      // 网格按模型尺度缩放
-      grid.visible = chk('gridVis', true);
-      const s = Math.max(maxDim * parseFloat(val('gridScale','1')), 0.001);
-      grid.scale.setScalar(s / 10); // 原始尺寸10，缩放到与 maxDim 同量级
+      // 面板：描边
+      $('#toggleOutline').addEventListener('change', e=> outlinePass.enabled = e.target.checked);
+      $('#color').addEventListener('input', e=>{
+        outlinePass.visibleEdgeColor.set(e.target.value);
+        outlinePass.hiddenEdgeColor.set(e.target.value);
+      });
+      $('#thickness').addEventListener('input', e=>{ outlinePass.edgeThickness = parseFloat(e.target.value); $('#thicknessOut').textContent=e.target.value; });
+      $('#strength').addEventListener('input', e=>{ outlinePass.edgeStrength  = parseFloat(e.target.value); $('#strengthOut').textContent=e.target.value; });
 
-      log(
-        `📐 bbox=${bboxSize.toArray().map(n=>n.toFixed(2)).join(',')}  center=${bboxCenter.toArray().map(n=>n.toFixed(2)).join(',')}`,
-        ` camZ=${camZ.toFixed(2)}  near/far=${camera.near.toFixed(2)}/${camera.far.toFixed(2)}`
-      );
+      // 面板：相机
+      $('#fov').addEventListener('input', e=>{ camera.fov = parseFloat(e.target.value); $('#fovOut').textContent=e.target.value; refitCamera(); });
+      $('#ratio').addEventListener('input', e=>{ $('#ratioOut').textContent=e.target.value; refitCamera(); });
+      $('#autoRange').addEventListener('change', e=>{
+        const on = e.target.checked;
+        $('#near').disabled = $('#far').disabled = on;
+        refitCamera();
+      });
+      $('#near').addEventListener('input', e=>{ $('#nearOut').textContent=parseFloat(e.target.value).toFixed(2); if(!$('#autoRange').checked) refitCamera(); });
+      $('#far').addEventListener('input', e=>{ $('#farOut').textContent=parseFloat(e.target.value).toFixed(0); if(!$('#autoRange').checked) refitCamera(); });
+      $('#refit').addEventListener('click', refitCamera);
+
+      // 面板：场景
+      $('#bg').addEventListener('input', e=> scene.background = new THREE.Color(e.target.value));
+      $('#light').addEventListener('input', e=>{ light1.intensity = parseFloat(e.target.value); $('#lightOut').textContent=e.target.value; });
+      $('#autorotate').addEventListener('change', e=> controls.autoRotate = e.target.checked);
+      $('#rotateSpeed').addEventListener('input', e=>{ controls.autoRotateSpeed = parseFloat(e.target.value); $('#rotateOut').textContent=e.target.value; });
+      $('#gridVis').addEventListener('change', refitCamera);
+      $('#gridScale').addEventListener('input', e=>{ $('#gridScaleOut').textContent=parseFloat(e.target.value).toFixed(2); refitCamera(); });
+
+      // 自适应
+      window.addEventListener('resize', () => {
+        const w = window.innerWidth, h = window.innerHeight;
+        camera.aspect = w/h; camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        composer.setSize(w, h);
+        outlinePass.setSize(w, h);
+      });
+
+      // 渲染循环
+      function animate(){ requestAnimationFrame(animate); controls.update(); composer.render(); }
+      animate();
     }
-
-    // 面板：描边
-    $('#toggleOutline').addEventListener('change', e=> outlinePass.enabled = e.target.checked);
-    $('#color').addEventListener('input', e=>{
-      outlinePass.visibleEdgeColor.set(e.target.value);
-      outlinePass.hiddenEdgeColor.set(e.target.value);
-    });
-    $('#thickness').addEventListener('input', e=>{ outlinePass.edgeThickness = parseFloat(e.target.value); $('#thicknessOut').textContent=e.target.value; });
-    $('#strength').addEventListener('input', e=>{ outlinePass.edgeStrength  = parseFloat(e.target.value); $('#strengthOut').textContent=e.target.value; });
-
-    // 面板：相机
-    $('#fov').addEventListener('input', e=>{ camera.fov = parseFloat(e.target.value); $('#fovOut').textContent=e.target.value; refitCamera(); });
-    $('#ratio').addEventListener('input', e=>{ $('#ratioOut').textContent=e.target.value; refitCamera(); });
-    $('#autoRange').addEventListener('change', e=>{
-      const on = e.target.checked;
-      $('#near').disabled = $('#far').disabled = on;
-      refitCamera();
-    });
-    $('#near').addEventListener('input', e=>{ $('#nearOut').textContent=parseFloat(e.target.value).toFixed(2); if(!$('#autoRange').checked) refitCamera(); });
-    $('#far').addEventListener('input', e=>{ $('#farOut').textContent=parseFloat(e.target.value).toFixed(0); if(!$('#autoRange').checked) refitCamera(); });
-    $('#refit').addEventListener('click', refitCamera);
-
-    // 面板：场景
-    $('#bg').addEventListener('input', e=> scene.background = new THREE.Color(e.target.value));
-    $('#light').addEventListener('input', e=>{ light1.intensity = parseFloat(e.target.value); $('#lightOut').textContent=e.target.value; });
-    $('#autorotate').addEventListener('change', e=> controls.autoRotate = e.target.checked);
-    $('#rotateSpeed').addEventListener('input', e=>{ controls.autoRotateSpeed = parseFloat(e.target.value); $('#rotateOut').textContent=e.target.value; });
-    $('#gridVis').addEventListener('change', refitCamera);
-    $('#gridScale').addEventListener('input', e=>{ $('#gridScaleOut').textContent=parseFloat(e.target.value).toFixed(2); refitCamera(); });
-
-    // ===== 自适应 =====
-    window.addEventListener('resize', () => {
-      const w = window.innerWidth, h = window.innerHeight;
-      camera.aspect = w/h; camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-      composer.setSize(w, h);
-      outlinePass.setSize(w, h);
-    });
-
-    // ===== 渲染循环 =====
-    function animate(){ requestAnimationFrame(animate); controls.update(); composer.render(); }
-    animate();
   </script>
 </body>
 </html>
