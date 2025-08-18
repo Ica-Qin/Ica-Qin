@@ -10,38 +10,51 @@
     .panel{
       position:fixed; top:12px; right:12px; padding:10px 12px; border-radius:12px;
       background:rgba(255,255,255,.9); font:14px/1.4 system-ui,Segoe UI,Roboto;
-      box-shadow:0 6px 30px rgba(0,0,0,.08); backdrop-filter:saturate(1.2) blur(8px);
+      box-shadow:0 6px 30px rgba(0,0,0,.08); backdrop-filter:saturate(1.2) blur(8px); z-index:10;
     }
     .panel label{display:flex;align-items:center;gap:8px;margin:6px 0;}
     .panel input[type="color"]{width:32px;height:20px;border:none;background:none;padding:0}
     .panel input[type="range"]{width:140px}
     .badge{position:fixed;left:12px;bottom:12px;font:12px system-ui;color:#666}
+    .log{position:fixed;left:12px;top:12px;max-width:60vw;background:rgba(0,0,0,.6);color:#fff;
+      font:12px/1.4 ui-monospace,monospace;padding:8px 10px;border-radius:8px;white-space:pre-wrap;z-index:10}
   </style>
 </head>
 <body>
   <div id="app"></div>
 
-  <!-- 控制面板（可选） -->
+  <!-- 控制面板 -->
   <div class="panel">
     <label><input id="toggleOutline" type="checkbox" checked> 启用描边</label>
     <label>颜色 <input id="color" type="color" value="#000000"></label>
     <label>粗细 <input id="thickness" type="range" min="1" max="6" step="0.1" value="2"></label>
     <label>强度 <input id="strength" type="range" min="0" max="10" step="0.1" value="3"></label>
     <label><input id="autorotate" type="checkbox" checked> 自动旋转</label>
-    <div style="margin-top:6px;color:#888">提示：点击模型可高亮该部件</div>
+    <div style="margin-top:6px;color:#888">提示：鼠标悬停/点击可高亮部件</div>
   </div>
   <div class="badge">three.js + OutlinePass</div>
+  <div class="log" id="log">日志：</div>
 
-  <script type="module">
-    // 使用 three 官方 CDN（稳定、2025 年可用），如需锁版本可把 @0.160.0 固定成你想要的版本
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-    import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
-    import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
-    import { OutlinePass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/OutlinePass.js';
+  <!-- 使用非模块版（全局 THREE.*），避免浏览器无法解析 ESModule import -->
+  <!-- 锁定版本到 0.152.2（稳定），以后需要可改为更高版本但注意兼容性 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/postprocessing/OutlinePass.js"></script>
 
-    // 1) 基础场景
+  <script>
+    // ========= 1) 改成你的 GLB 路径 =========
+    // 与 viewer.html 同目录：用相对路径 "./stage.glb"
+    // 如果放国内 OSS/CDN：改成它的 https 直链
+    const GLB_URL = "./stage.glb"; // 可加 ?v=时间戳 刷新缓存，例如 "./stage.glb?v=20250817"
+
+    // 日志工具
+    const LOG = document.getElementById('log');
+    const log = (...args)=>{ LOG.textContent += '\n' + args.join(' '); console.log(...args); };
+
+    // ========= 2) 基础场景 =========
     const container = document.getElementById('app');
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -59,49 +72,64 @@
     light1.position.set(2, 4, 2);
     scene.add(new THREE.AmbientLight(0xffffff, 0.6), light1);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.6;
 
-    // 2) 加载 GLB（把下面 URL 换成你的国内 CDN / OSS 直链）
-    const GLB_URL = "./stage.glb"; // TODO: 换成你的
-    const loader = new GLTFLoader();
+    // 可视化辅助：坐标轴/网格，证明渲染正常
+    const axes = new THREE.AxesHelper(1.2);
+    const grid = new THREE.GridHelper(10, 10, 0x888888, 0xdddddd);
+    grid.position.y = -0.01;
+    scene.add(axes, grid);
 
-    // 为了能对每个子网格单独描边，确保它们是 Mesh
-    let modelRoot = null;
-    const selectable = [];  // 可被描边的对象集合
-    loader.load(GLB_URL, (gltf) => {
-      modelRoot = gltf.scene;
-      modelRoot.traverse(obj => {
-        if (obj.isMesh) {
-          obj.castShadow = obj.receiveShadow = true;
-          selectable.push(obj);
-        }
-      });
-      scene.add(modelRoot);
-      fitCameraToObject(camera, modelRoot, controls);
-      outlinePass.selectedObjects = selectable; // 默认对整模描边（外轮廓/部件边）
-    }, undefined, (e) => {
-      console.error('GLB 加载失败：', e);
-    });
-
-    // 3) 后处理：OutlinePass
-    const composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, camera);
+    // ========= 3) 后处理：Outline =========
+    const composer = new THREE.EffectComposer(renderer);
+    const renderPass = new THREE.RenderPass(scene, camera);
     composer.addPass(renderPass);
 
-    const size = new THREE.Vector2(window.innerWidth, window.innerHeight);
-    const outlinePass = new OutlinePass(size, scene, camera);
-    outlinePass.edgeStrength = 3.0;  // 强度
+    const outlinePass = new THREE.OutlinePass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      scene, camera
+    );
+    outlinePass.edgeStrength = 3.0;      // 强度
+    outlinePass.edgeThickness = 2.0;     // 粗细（像素）
     outlinePass.edgeGlow = 0.0;
-    outlinePass.edgeThickness = 2.0; // 粗细（像素）
+    outlinePass.usePatternTexture = false;
     outlinePass.visibleEdgeColor.set('#000000');
-    outlinePass.hiddenEdgeColor.set('#000000'); // 可见与被遮挡的边同色（也可设置不同色）
+    outlinePass.hiddenEdgeColor.set('#000000');
     composer.addPass(outlinePass);
 
-    // 4) 交互：点击/悬停高亮
+    // ========= 4) 加载 GLB =========
+    const loader = new THREE.GLTFLoader();
+    const selectable = []; // 可被描边/选中的网格
+    loader.load(GLB_URL, (gltf) => {
+      log('✅ 模型加载完成：', GLB_URL);
+      const root = gltf.scene;
+      root.traverse(o => {
+        if (o.isMesh) { o.castShadow = o.receiveShadow = true; selectable.push(o); }
+      });
+      scene.add(root);
+      fitCameraToObject(camera, root, controls);
+      outlinePass.selectedObjects = selectable.length ? selectable : [root];
+    }, (evt) => {
+      if (evt.total) {
+        const p = (evt.loaded/evt.total*100).toFixed(1);
+        LOG.textContent = `加载中：${p}%\n` + LOG.textContent.split('\n').slice(1).join('\n');
+      } else {
+        log('加载中：', evt.loaded, 'bytes');
+      }
+    }, (err) => {
+      log('❌ 模型加载失败：', err && (err.message || err));
+      // 兜底：显示一个方块，证明渲染没问题
+      const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness:0, roughness:1 });
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
+      scene.add(cube);
+      fitCameraToObject(camera, cube, controls);
+    });
+
+    // ========= 5) 悬停/点击高亮 =========
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let hovered = null;
@@ -117,7 +145,6 @@
       hovered = hits[0]?.object || null;
       updateSelection();
     }
-
     function onClick(){
       if (!selectable.length) return;
       raycaster.setFromCamera(pointer, camera);
@@ -125,55 +152,36 @@
       clicked = hits[0]?.object || null;
       updateSelection(true);
     }
-
     function updateSelection(byClick=false){
-      // 逻辑：优先显示 clicked；没有 clicked 时显示 hovered；都没有时显示整模（selectable）
-      if (byClick && clicked){
-        outlinePass.selectedObjects = [clicked];
-      } else if (!clicked && hovered){
-        outlinePass.selectedObjects = [hovered];
-      } else if (!clicked && !hovered){
-        outlinePass.selectedObjects = selectable;
-      }
+      if (byClick && clicked) outlinePass.selectedObjects = [clicked];
+      else if (!clicked && hovered) outlinePass.selectedObjects = [hovered];
+      else if (!clicked && !hovered) outlinePass.selectedObjects = selectable.length?selectable:[];
     }
-
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('click', onClick);
 
-    // 5) 响应式
+    // ========= 6) 自适应 =========
     window.addEventListener('resize', () => {
       const w = window.innerWidth, h = window.innerHeight;
-      camera.aspect = w / h; camera.updateProjectionMatrix();
+      camera.aspect = w/h; camera.updateProjectionMatrix();
       renderer.setSize(w, h);
       composer.setSize(w, h);
       outlinePass.setSize(w, h);
     });
 
-    // 6) 面板绑定
+    // ========= 7) 面板绑定 =========
     const $ = (id)=>document.getElementById(id);
-    $('#toggleOutline').addEventListener('change', e=>{
-      outlinePass.enabled = e.target.checked;
-    });
+    $('#toggleOutline').addEventListener('change', e=> outlinePass.enabled = e.target.checked);
     $('#color').addEventListener('input', e=>{
       outlinePass.visibleEdgeColor.set(e.target.value);
       outlinePass.hiddenEdgeColor.set(e.target.value);
     });
-    $('#thickness').addEventListener('input', e=>{
-      outlinePass.edgeThickness = parseFloat(e.target.value);
-    });
-    $('#strength').addEventListener('input', e=>{
-      outlinePass.edgeStrength = parseFloat(e.target.value);
-    });
-    $('#autorotate').addEventListener('change', e=>{
-      controls.autoRotate = e.target.checked;
-    });
+    $('#thickness').addEventListener('input', e=> outlinePass.edgeThickness = parseFloat(e.target.value));
+    $('#strength').addEventListener('input', e=> outlinePass.edgeStrength = parseFloat(e.target.value));
+    $('#autorotate').addEventListener('change', e=> controls.autoRotate = e.target.checked);
 
-    // 7) 动画循环
-    function animate(){
-      requestAnimationFrame(animate);
-      controls.update();
-      composer.render();
-    }
+    // ========= 8) 动画循环 =========
+    function animate(){ requestAnimationFrame(animate); controls.update(); composer.render(); }
     animate();
 
     // 视角适配
@@ -181,14 +189,12 @@
       const box = new THREE.Box3().setFromObject(object);
       const size = new THREE.Vector3(); box.getSize(size);
       const center = new THREE.Vector3(); box.getCenter(center);
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const fov = camera.fov * (Math.PI / 180);
-      let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
-      cameraZ *= 1.3; // 余量
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const fov = camera.fov * (Math.PI/180);
+      let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov/2))); cameraZ *= 1.3;
       camera.position.set(center.x, center.y + maxDim*0.1, cameraZ);
-      camera.lookAt(center);
-      controls.target.copy(center);
-      controls.update();
+      camera.lookAt(center); controls.target.copy(center); controls.update();
+      log('📐 bbox=', size.toArray().map(n=>n.toFixed(2)).join(','), ' center=', center.toArray().map(n=>n.toFixed(2)).join(','));
     }
   </script>
 </body>
