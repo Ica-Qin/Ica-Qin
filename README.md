@@ -8,7 +8,7 @@ This is Ica. I'm here to share some of the projects from my creative journey.
 
 [Resonate Waves: Compromising Music Box with touchboards](https://github.com/Ica-Qin/Resonate-Waves)
 
-[Wolves: Auto animal movement driven by 3D-printing gears and Arduino](https://github.com/Ica-Qin/Mechanical-Fantasia)
+[Kinetic Sculptures using 3D-printing gears, servos and coding](https://github.com/Ica-Qin/Mechanical-Fantasia)
 
 
 **Games:**
