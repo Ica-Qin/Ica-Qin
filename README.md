@@ -2,7 +2,7 @@
 This is Ica. I'm here to share some of the projects from my creative journey.
 
 
-Interactive Installations:
+**Interactive Installations:**
 
 [太初-Primodial: Interactive Projection Mapping](https://github.com/Ica-Qin/Priomodial)
 
@@ -11,7 +11,7 @@ Interactive Installations:
 [Wolves: Auto animal movement driven by 3D-printing gears and Arduino](https://github.com/Ica-Qin/Mechanical-Fantasia)
 
 
-Games:
+**Games:**
 
 [送嫁](https://github.com/Ica-Qin/Palingenesia)
 
@@ -21,4 +21,4 @@ Games:
 I hate self-introduction.
 
 - 📫 How to reach me: peiyang_qin@163.com
-- Personal website: www.icaqin.top
+- 🌐 Personal website: www.icaqin.top
