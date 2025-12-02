@@ -4,6 +4,8 @@ This is Ica. I'm here to share some of the projects from my creative journey.
 
 **Interactive Installations:**
 
+[Emoji-fied: Tangible Emotion-to-Bitmap Machine System]()
+
 [太初-Primodial: Interactive Projection Mapping](https://github.com/Ica-Qin/Priomodial)
 
 [Resonate Waves: Compromising Music Box with touchboards](https://github.com/Ica-Qin/Resonate-Waves)
@@ -21,4 +23,4 @@ This is Ica. I'm here to share some of the projects from my creative journey.
 I hate self-introduction.
 
 - 📫 How to reach me: peiyang_qin@163.com
-- 🌐 Personal website: www.icaqin.top
+- 🌐 Personal website: [www.icaqin.top (Chinese Mainland)](https://www.icaqin.top)  [www.icaqin.com (GInternational)](https://www.icaqin.com)
