@@ -23,4 +23,4 @@ This is Ica. I'm here to share some of the projects from my creative journey.
 I hate self-introduction.
 
 - 📫 How to reach me: peiyang_qin@163.com
-- 🌐 Personal website: [www.icaqin.top (Chinese Mainland)](https://www.icaqin.top)  [www.icaqin.com (GInternational)](https://www.icaqin.com)
+- 🌐 Personal website: [www.icaqin.top (Chinese Mainland)](https://www.icaqin.top)  [www.icaqin.com (International)](https://www.icaqin.com)
